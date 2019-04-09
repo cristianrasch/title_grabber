@@ -18,9 +18,10 @@ import requests
 class TitleGrabber:
     URL_RE = re.compile('https?://\S+', re.I)
     URL_HEADER = 'url'
+    END_URL_HEADER = 'end_url'
     PAGE_TIT_HEAD = 'page_title'
     ART_TIT_HEAD = 'article_title'
-    HEADERS = (URL_HEADER, PAGE_TIT_HEAD, ART_TIT_HEAD)
+    HEADERS = (URL_HEADER, END_URL_HEADER, PAGE_TIT_HEAD, ART_TIT_HEAD)
     CONN_TO = float(os.environ.get('CONNECT_TIMEOUT', 10))
     READ_TO = float(os.environ.get('READ_TIMEOUT', 15))
     TIMEOUT = (CONN_TO, READ_TO)
@@ -69,6 +70,7 @@ class TitleGrabber:
                         h = self.__processed_urls().get(url)
                         if h:
                             writer.writerow({ self.URL_HEADER: url,
+                                              self.END_URL_HEADER: h[self.END_URL_HEADER],
                                               self.PAGE_TIT_HEAD: h[self.PAGE_TIT_HEAD],
                                               self.ART_TIT_HEAD: h[self.ART_TIT_HEAD] })
                             continue
@@ -89,7 +91,10 @@ class TitleGrabber:
 
 
     def __build_csv_row_from(self, url):
-        html = self.__get(url)
+        res = self.__get(url)
+        if not res: return
+
+        end_url, html = res
         if not html: return
 
         doc = BeautifulSoup(html, self.HTML_PARSER)
@@ -99,8 +104,8 @@ class TitleGrabber:
         art_tit_node = doc.select_one('article h1') or doc.select_one('h1')
         art_tit = self.__clean_up_whitespace(art_tit_node) if art_tit_node else ''
 
-        return { self.URL_HEADER: url, self.PAGE_TIT_HEAD: page_tit,
-                 self.ART_TIT_HEAD: art_tit }
+        return { self.URL_HEADER: url, self.END_URL_HEADER: end_url,
+                 self.PAGE_TIT_HEAD: page_tit, self.ART_TIT_HEAD: art_tit }
 
 
     def __clean_up_whitespace(self, tag):
@@ -114,9 +119,8 @@ class TitleGrabber:
 
     def __get(self, url):
         retries = 0
-        txt = None
 
-        while txt is None and retries < self.MAX_RETRIES:
+        while retries < self.MAX_RETRIES:
             try:
                 res = requests.get(url, timeout=self.TIMEOUT)
             except requests.exceptions.Timeout:
@@ -125,13 +129,11 @@ class TitleGrabber:
                 time.sleep(retries)
             else:
                 if res.status_code == requests.codes.ok:
-                    return res.text
+                    return res.url, res.text
                 else:
                     break
             finally:
                 self.logger.debug(f'[Thread: {threading.get_ident()}] GET {url} [{res.status_code}]')
-
-        return txt
 
 
     @lru_cache(maxsize=1)
@@ -150,10 +152,12 @@ class TitleGrabber:
 
         with self.__out_path.open(newline='') as f:
             url_h = self.URL_HEADER
+            end_url_h = self.END_URL_HEADER
             page_t_h = self.PAGE_TIT_HEAD
             art_t_h = self.ART_TIT_HEAD
 
-            return { r[url_h]: { page_t_h: r[page_t_h], art_t_h: r[art_t_h] }
+            return { r[url_h]: { end_url_h: r[end_url_h], page_t_h: r[page_t_h],
+                                 art_t_h: r[art_t_h] }
                         for r in csv.DictReader(f, dialect=self.__csv_dialect())
                         if r[page_t_h] and r[art_t_h] }
 
