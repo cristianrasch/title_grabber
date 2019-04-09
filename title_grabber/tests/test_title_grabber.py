@@ -9,7 +9,7 @@ class TitleGrabberTest(unittest.TestCase):
 
     def setUp(self):
         self.out_path = Path('test_output.csv').resolve()
-        self.title_grabber = TitleGrabber(self.out_path)
+        self.title_grabber = TitleGrabber(dict(out_path=self.out_path))
 
 
     def tearDown(self):

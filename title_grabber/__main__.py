@@ -16,15 +16,15 @@ from bs4 import BeautifulSoup
 import requests
 
 class TitleGrabber:
+    DEF_OUT_PATH = 'out.csv'
+    CONN_TO = 10
+    READ_TO = 15
     URL_RE = re.compile('https?://\S+', re.I)
     URL_HEADER = 'url'
     END_URL_HEADER = 'end_url'
     PAGE_TIT_HEAD = 'page_title'
     ART_TIT_HEAD = 'article_title'
     HEADERS = (URL_HEADER, END_URL_HEADER, PAGE_TIT_HEAD, ART_TIT_HEAD)
-    CONN_TO = float(os.environ.get('CONNECT_TIMEOUT', 10))
-    READ_TO = float(os.environ.get('READ_TIMEOUT', 15))
-    TIMEOUT = (CONN_TO, READ_TO)
     MAX_RETRIES = 3
     HTML_PARSER = 'html.parser'
     NEW_LINE_RE = re.compile('\n')
@@ -32,15 +32,22 @@ class TitleGrabber:
     IS_WIN_PLAT = sys.platform.startswith('win')
     CSV_DIALECT = 'excel' if IS_WIN_PLAT else 'unix'
 
-    def __init__(self, out_path):
-        self.__out_path = out_path
+    def __init__(self, options):
+        self.__options = options
+        self.__out_path = options.get('out_path',
+                                      Path(self.DEF_OUT_PATH).resolve())
 
         parent_path = Path(__file__).parent
-        log_level = logging.DEBUG if os.environ.get('DEBUG') else logging.INFO
+        log_level = logging.DEBUG if options.get('debug') else logging.INFO
         self.logger = logging.getLogger(parent_path.stem)
         self.logger.setLevel(log_level)
-        handler = logging.FileHandler(Path.cwd().joinpath(parent_path.with_suffix('.log').name),
-                                      mode='w')
+
+        if options.get('debug'):
+            handler = logging.StreamHandler()
+        else:
+            handler = logging.FileHandler(Path.cwd().joinpath(parent_path.with_suffix('.log').name),
+                                          mode='w')
+
         handler.setLevel(log_level)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                                       datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -117,12 +124,18 @@ class TitleGrabber:
         return self.WHITESPACE_RE.sub(' ', text)
 
 
+    @lru_cache(maxsize=1)
+    def __timeout(self):
+        return (self.__options.get('connect_timeout', self.CONN_TO),
+                self.__options.get('read_timeout', self.READ_TO))
+
+
     def __get(self, url):
         retries = 0
 
         while retries < self.MAX_RETRIES:
             try:
-                res = requests.get(url, timeout=self.TIMEOUT)
+                res = requests.get(url, timeout=self.__timeout())
             except requests.exceptions.Timeout:
                 retries += 1
                 self.logger.warning(f'[Thread: {threading.get_ident()}] GET {url} timed out [retry #{retries}]. Going to sleep for {retries} sec(s)')
@@ -166,17 +179,27 @@ if __name__ == '__main__':
     import argparse
     from pathlib import Path
 
-    DEF_OUT_PATH = 'out.csv'
-
     parser = argparse.ArgumentParser()
-    parser.add_argument('-o', '--output', metavar='OUT_FILE',
-                        help=f'Output file (defaults to {DEF_OUT_PATH})',
-                        default='out.csv')
+    parser.add_argument('-o', '--output', metavar='OUT_FILE', dest='out_path',
+                        help=f'Output file (defaults to {TitleGrabber.DEF_OUT_PATH})',
+                        default=TitleGrabber.DEF_OUT_PATH)
+    parser.add_argument('--connect-timeout', metavar='TIMEOUT', type=float,
+                        help=f'HTTP connect timeout. Defaults to the value of the CONNECT_TIMEOUT env var or {TitleGrabber.CONN_TO}',
+                        default=float(os.environ.get('CONNECT_TIMEOUT',
+                                                     TitleGrabber.CONN_TO)))
+    parser.add_argument('--read-timeout', metavar='TIMEOUT', type=float,
+                        help=f'HTTP read timeout. Defaults to the value of the READ_TIMEOUT env var or {TitleGrabber.READ_TO}',
+                        default=float(os.environ.get('READ_TIMEOUT',
+                                                     TitleGrabber.READ_TO)))
     parser.add_argument('files', metavar='FILES',
                         help="1 or more CSV files containing URLs (1 per line)",
                         nargs='*')
+    parser.add_argument('-d', '--debug',
+                        help='Log to STDOUT instead of to a file in the CWD.  Defaults to the value of the DEBUG env var or False',
+                        action='store_true',
+                        default=os.environ.get('DEBUG'))
     args = parser.parse_args()
+    args.out_path = Path(args.out_path).expanduser().resolve()
 
-    out_path = Path(args.output).expanduser().resolve()
     files = [Path(f).expanduser().resolve() for f in args.files]
-    TitleGrabber(out_path)(files)
+    TitleGrabber(vars(args))(files)
