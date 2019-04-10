@@ -43,6 +43,7 @@ Usage instructions
                             the system (8)
       -d, --debug           Log to STDOUT instead of to a file in the CWD.
                             Defaults to the value of the DEBUG env var or False
+      -V, --version         Print program version and exit
 
 dev setup instructions
 ----------------------

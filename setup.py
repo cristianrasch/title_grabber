@@ -1,10 +1,12 @@
 from setuptools import find_packages, setup
 
+import title_grabber
+
 with open('README.md') as fh: long_description = fh.read()
 
 setup(
     name='title_grabber-cristianrasch',
-    version='0.1.1',
+    version=title_grabber.version,
     author='Cristian Rasch',
     author_email='cristianrasch@fastmail.fm',
     description='Grabs page & article titles from lists of URLs contained in files passed in as arguments',

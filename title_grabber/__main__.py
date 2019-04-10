@@ -16,6 +16,8 @@ import threading
 from bs4 import BeautifulSoup
 import requests
 
+import title_grabber
+
 class TitleGrabber:
     DEF_OUT_PATH = 'out.csv'
     CONN_TO = 10
@@ -181,7 +183,8 @@ if __name__ == '__main__':
     import argparse
     from pathlib import Path
 
-    parser = argparse.ArgumentParser(prog=TitleGrabber.PARENT_PATH.stem)
+    prog_name = TitleGrabber.PARENT_PATH.stem
+    parser = argparse.ArgumentParser(prog=prog_name)
     parser.add_argument('-o', '--output', metavar='OUT_FILE', dest='out_path',
                         help=f'Output file (defaults to {TitleGrabber.DEF_OUT_PATH})',
                         default=TitleGrabber.DEF_OUT_PATH)
@@ -208,7 +211,14 @@ if __name__ == '__main__':
                         help='Log to STDOUT instead of to a file in the CWD.  Defaults to the value of the DEBUG env var or False',
                         action='store_true',
                         default=os.environ.get('DEBUG'))
+    parser.add_argument('-V', '--version',
+                        help='Print program version and exit',
+                        action='store_true')
     args = parser.parse_args()
+
+    if args.version:
+        print(f'{prog_name} version {title_grabber.version}')
+        sys.exit(0)
 
     if not args.files:
         print('At least 1 input file is required!', file=sys.stderr)
