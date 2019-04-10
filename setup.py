@@ -4,7 +4,7 @@ with open('README.md') as fh: long_description = fh.read()
 
 setup(
     name='title_grabber-cristianrasch',
-    version='0.1.0',
+    version='0.1.1',
     author='Cristian Rasch',
     author_email='cristianrasch@fastmail.fm',
     description='Grabs page & article titles from lists of URLs contained in files passed in as arguments',

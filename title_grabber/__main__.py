@@ -32,6 +32,7 @@ class TitleGrabber:
     WHITESPACE_RE = re.compile('\s{2,}')
     IS_WIN_PLAT = sys.platform.startswith('win')
     CSV_DIALECT = 'excel' if IS_WIN_PLAT else 'unix'
+    PARENT_PATH = Path(__file__).parent
 
     def __init__(self, options):
         self.__options = options
@@ -41,14 +42,13 @@ class TitleGrabber:
                                       Path(self.DEF_OUT_PATH).resolve())
 
         log_level = logging.DEBUG if options.get('debug') else logging.INFO
-        parent_path = Path(__file__).parent
-        self.logger = logging.getLogger(parent_path.stem)
+        self.logger = logging.getLogger(self.PARENT_PATH.stem)
         self.logger.setLevel(log_level)
 
         if options.get('debug'):
             handler = logging.StreamHandler()
         else:
-            handler = logging.FileHandler(Path.cwd().joinpath(parent_path.with_suffix('.log').name),
+            handler = logging.FileHandler(Path.cwd().joinpath(self.PARENT_PATH.with_suffix('.log').name),
                                           mode='w')
 
         handler.setLevel(log_level)
@@ -181,7 +181,7 @@ if __name__ == '__main__':
     import argparse
     from pathlib import Path
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(prog=TitleGrabber.PARENT_PATH.stem)
     parser.add_argument('-o', '--output', metavar='OUT_FILE', dest='out_path',
                         help=f'Output file (defaults to {TitleGrabber.DEF_OUT_PATH})',
                         default=TitleGrabber.DEF_OUT_PATH)
