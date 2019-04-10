@@ -5,6 +5,7 @@ import csv
 import fileinput
 from functools import lru_cache
 import logging
+from multiprocessing import cpu_count
 import os
 from pathlib import Path
 import re
@@ -34,11 +35,13 @@ class TitleGrabber:
 
     def __init__(self, options):
         self.__options = options
+        self.max_retries = options.get('max_retries', self.MAX_RETRIES)
+        self.max_threads = options.get('max_threads', cpu_count())
         self.__out_path = options.get('out_path',
                                       Path(self.DEF_OUT_PATH).resolve())
 
-        parent_path = Path(__file__).parent
         log_level = logging.DEBUG if options.get('debug') else logging.INFO
+        parent_path = Path(__file__).parent
         self.logger = logging.getLogger(parent_path.stem)
         self.logger.setLevel(log_level)
 
@@ -55,7 +58,6 @@ class TitleGrabber:
         self.logger.addHandler(handler)
 
 
-
     def __call__(self, files):
         tmp_path = self.__out_path.with_suffix(f'.tmp{self.__out_path.suffix}')
 
@@ -66,7 +68,7 @@ class TitleGrabber:
                                         quoting=csv.QUOTE_ALL)
                 writer.writeheader()
 
-                with ThreadPoolExecutor() as executor:
+                with ThreadPoolExecutor(max_workers=self.max_threads) as executor:
                     futures = []
 
                     for line in fileinput.input(files):
@@ -133,7 +135,7 @@ class TitleGrabber:
     def __get(self, url):
         retries = 0
 
-        while retries < self.MAX_RETRIES:
+        while retries < self.max_retries:
             try:
                 res = requests.get(url, timeout=self.__timeout())
             except requests.exceptions.Timeout:
@@ -191,6 +193,14 @@ if __name__ == '__main__':
                         help=f'HTTP read timeout. Defaults to the value of the READ_TIMEOUT env var or {TitleGrabber.READ_TO}',
                         default=float(os.environ.get('READ_TIMEOUT',
                                                      TitleGrabber.READ_TO)))
+    parser.add_argument('-r', '--max-retries', metavar='RETRIES', type=int,
+                        help=f'Max. # of times to retry failed HTTP reqs. Defaults to the value of the MAX_RETRIES env var or {TitleGrabber.MAX_RETRIES}',
+                        default=float(os.environ.get('MAX_RETRIES',
+                                                     TitleGrabber.MAX_RETRIES)))
+    parser.add_argument('-t', '--max-threads', metavar='THREADS', type=int,
+                        help=f'Max. # of threads to use. Defaults to the value of the MAX_THREADS env var or the # of logical processors in the system ({cpu_count()})',
+                        default=float(os.environ.get('MAX_THREADS',
+                                                     cpu_count())))
     parser.add_argument('files', metavar='FILES',
                         help="1 or more CSV files containing URLs (1 per line)",
                         nargs='*')
@@ -199,7 +209,12 @@ if __name__ == '__main__':
                         action='store_true',
                         default=os.environ.get('DEBUG'))
     args = parser.parse_args()
-    args.out_path = Path(args.out_path).expanduser().resolve()
 
+    if not args.files:
+        print('At least 1 input file is required!', file=sys.stderr)
+        sys.exit(1)
+
+    args.out_path = Path(args.out_path).expanduser().resolve()
     files = [Path(f).expanduser().resolve() for f in args.files]
+
     TitleGrabber(vars(args))(files)
