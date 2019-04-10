@@ -18,8 +18,8 @@ Usage instructions
 `python -m title_grabber -h`
 
     usage: title_grabber [-h] [-o OUT_FILE] [--connect-timeout TIMEOUT]
-                        [--read-timeout TIMEOUT] [-r RETRIES] [-t THREADS] [-d]
-                        [FILES [FILES ...]]
+                         [--read-timeout TIMEOUT] [-r RETRIES] [-t THREADS] [-d]
+                         [FILES [FILES ...]]
 
     positional arguments:
       FILES                 1 or more CSV files containing URLs (1 per line)
