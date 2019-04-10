@@ -34,6 +34,9 @@ Usage instructions
       --read-timeout TIMEOUT
                             HTTP read timeout. Defaults to the value of the
                             READ_TIMEOUT env var or 15
+      --max-redirects REDIRECTS
+                            Max. # of HTTP redirects to follow. Defaults to the
+                            value of the MAX_REDIRECTS env var or 5
       -r RETRIES, --max-retries RETRIES
                             Max. # of times to retry failed HTTP reqs. Defaults to
                             the value of the MAX_RETRIES env var or 3

@@ -29,6 +29,7 @@ class TitleGrabber:
     ART_TIT_HEAD = 'article_title'
     HEADERS = (URL_HEADER, END_URL_HEADER, PAGE_TIT_HEAD, ART_TIT_HEAD)
     MAX_RETRIES = 3
+    MAX_REDIRECTS = 5
     HTML_PARSER = 'html.parser'
     NEW_LINE_RE = re.compile('\n')
     WHITESPACE_RE = re.compile('\s{2,}')
@@ -38,6 +39,7 @@ class TitleGrabber:
 
     def __init__(self, options):
         self.__options = options
+        self.max_redirects = options.get('max_redirects', self.MAX_REDIRECTS)
         self.max_retries = options.get('max_retries', self.MAX_RETRIES)
         self.max_threads = options.get('max_threads', cpu_count())
         self.__out_path = options.get('out_path',
@@ -133,24 +135,35 @@ class TitleGrabber:
         return (self.__options.get('connect_timeout', self.CONN_TO),
                 self.__options.get('read_timeout', self.READ_TO))
 
+    @lru_cache(maxsize=1)
+    def __session(self):
+        session = requests.Session();
+        session.max_redirects = self.max_redirects
+        return session
+
 
     def __get(self, url):
         retries = 0
 
         while retries < self.max_retries:
             try:
-                res = requests.get(url, timeout=self.__timeout())
+                res = self.__session().get(url, timeout=self.__timeout())
             except requests.exceptions.Timeout:
                 retries += 1
                 self.logger.warning(f'[Thread: {threading.get_ident()}] GET {url} timed out [retry #{retries}]. Going to sleep for {retries} sec(s)')
                 time.sleep(retries)
+            except requests.TooManyRedirects:
+                self.logger.error(f'[Thread: {threading.get_ident()}] GET {url} resulted in more than {self.max_redirects} redirects')
+                res = None
+                break
             else:
                 if res.status_code == requests.codes.ok:
                     return res.url, res.text
                 else:
                     break
             finally:
-                self.logger.debug(f'[Thread: {threading.get_ident()}] GET {url} [{res.status_code}]')
+                if res:
+                    self.logger.debug(f'[Thread: {threading.get_ident()}] GET {url} [{res.status_code}]')
 
 
     @lru_cache(maxsize=1)
@@ -196,6 +209,10 @@ if __name__ == '__main__':
                         help=f'HTTP read timeout. Defaults to the value of the READ_TIMEOUT env var or {TitleGrabber.READ_TO}',
                         default=float(os.environ.get('READ_TIMEOUT',
                                                      TitleGrabber.READ_TO)))
+    parser.add_argument('--max-redirects', metavar='REDIRECTS', type=int,
+                        help=f'Max. # of HTTP redirects to follow. Defaults to the value of the MAX_REDIRECTS env var or {TitleGrabber.MAX_REDIRECTS}',
+                        default=float(os.environ.get('MAX_RETRIES',
+                                                     TitleGrabber.MAX_RETRIES)))
     parser.add_argument('-r', '--max-retries', metavar='RETRIES', type=int,
                         help=f'Max. # of times to retry failed HTTP reqs. Defaults to the value of the MAX_RETRIES env var or {TitleGrabber.MAX_RETRIES}',
                         default=float(os.environ.get('MAX_RETRIES',
