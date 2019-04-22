@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 import fileinput
 from functools import lru_cache
+import itertools
 import logging
 from multiprocessing import cpu_count
 import os
@@ -12,6 +13,7 @@ import re
 import shutil
 import sys
 import threading
+from urllib.parse import urlparse, urljoin
 
 from bs4 import BeautifulSoup
 import requests
@@ -36,6 +38,12 @@ class TitleGrabber:
     IS_WIN_PLAT = sys.platform.startswith('win')
     CSV_DIALECT = 'excel' if IS_WIN_PLAT else 'unix'
     PARENT_PATH = Path(__file__).parent
+    TWEET_PERMA_LINK_SEL = '.tweet.permalink-tweet'
+    TWEET_TXT_SELS = ['.tweet-text', 'QuoteTweet']
+    TWITTER_HOST = 'twitter.com'
+    TWITTER_STATUS_RE = re.compile('/status/\d+\Z')
+    TWITTER_URL_PREFIX = f'https://{TWITTER_HOST}'
+    CSV_FIELD_SEP = ','
 
     def __init__(self, options):
         self.__options = options
@@ -49,7 +57,9 @@ class TitleGrabber:
         self.logger = logging.getLogger(self.PARENT_PATH.stem)
         self.logger.setLevel(log_level)
 
-        if options.get('debug'):
+        if os.environ.get('TESTING'):
+            handler = logging.NullHandler()
+        elif options.get('debug'):
             handler = logging.StreamHandler()
         else:
             handler = logging.FileHandler(Path.cwd().joinpath(self.PARENT_PATH.with_suffix('.log').name),
@@ -99,18 +109,55 @@ class TitleGrabber:
                         else:
                             if row: writer.writerow(row)
         finally:
+            self.__session().close()
             if tmp_path.exists():
                 shutil.move(tmp_path, self.__out_path)
 
 
+    def __parse_end_url_from(self, doc):
+        tweet_urls = []
+        for tweet_txt_sel in self.TWEET_TXT_SELS:
+            tweet_urls.extend((a['href'] for a in doc.select(f'{self.TWEET_PERMA_LINK_SEL} {tweet_txt_sel} a')))
+        filter(None, tweet_urls)
+        tweet_urls = set(tweet_urls)
+
+        urls = []
+        for url in tweet_urls:
+            if self.URL_RE.match(url):
+                res = self.__open_w_timeout(url)
+
+                if res:
+                    uri = urlparse(res.url)
+
+                    if uri.netloc != self.TWITTER_HOST or self.TWITTER_STATUS_RE.search(uri.path):
+                        urls.append(res.url)
+                    continue
+
+            urls.append(url)
+
+        tweet_urls = [urljoin(self.TWITTER_URL_PREFIX, url) if url.startswith('/') else url for url in urls]
+
+        tweet_urls = list(itertools.filterfalse(lambda url: urlparse(url).netloc == self.TWITTER_HOST and
+                                                                urlparse(url).path.count('/') > 1 and not
+                                                                self.TWITTER_STATUS_RE.search(url),
+                                                tweet_urls))
+        tweet_urls.sort()
+
+        if tweet_urls: return self.CSV_FIELD_SEP.join(tweet_urls)
+
+
     def __build_csv_row_from(self, url):
-        res = self.__get(url)
+        res = self.__read_w_timeout(url)
         if not res: return
 
         end_url, html = res
         if not html: return
 
         doc = BeautifulSoup(html, self.HTML_PARSER)
+
+        e_url = self.__parse_end_url_from(doc)
+        if e_url: end_url = e_url
+
         page_tit_node = doc.select_one('title')
         page_tit = self.__clean_up_whitespace(page_tit_node) if page_tit_node else ''
 
@@ -142,7 +189,7 @@ class TitleGrabber:
         return session
 
 
-    def __get(self, url):
+    def __open_w_timeout(self, url):
         retries = 0
 
         while retries < self.max_retries:
@@ -158,12 +205,18 @@ class TitleGrabber:
                 break
             else:
                 if res.status_code == requests.codes.ok:
-                    return res.url, res.text
+                    return res
                 else:
                     break
             finally:
                 if res:
                     self.logger.debug(f'[Thread: {threading.get_ident()}] GET {url} [{res.status_code}]')
+
+
+    def __read_w_timeout(self, url):
+        res = self.__open_w_timeout(url)
+        if res:
+            return res.url, res.text
 
 
     @lru_cache(maxsize=1)
