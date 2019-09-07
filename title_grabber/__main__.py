@@ -277,7 +277,7 @@ if __name__ == '__main__':
                                                      cpu_count())))
     parser.add_argument('files', metavar='FILES',
                         help="1 or more CSV files containing URLs (1 per line)",
-                        nargs='*')
+                        nargs='+')
     parser.add_argument('-d', '--debug',
                         help='Log to STDOUT instead of to a file in the CWD.  Defaults to the value of the DEBUG env var or False',
                         action='store_true',
@@ -286,10 +286,6 @@ if __name__ == '__main__':
                         help='Print program version and exit',
                         action='version')
     args = parser.parse_args()
-
-    if not args.files:
-        print('At least 1 input file is required!', file=sys.stderr)
-        sys.exit(1)
 
     args.out_path = Path(args.out_path).expanduser().resolve()
     files = [Path(f).expanduser().resolve() for f in args.files]
