@@ -245,7 +245,7 @@ class TitleGrabber:
                         if r[page_t_h] and r[art_t_h] }
 
 
-if __name__ == '__main__':
+def parse_args():
     import argparse
     from pathlib import Path
 
@@ -289,5 +289,13 @@ if __name__ == '__main__':
 
     args.out_path = Path(args.out_path).expanduser().resolve()
     files = [Path(f).expanduser().resolve() for f in args.files]
+    return args, files
 
+
+def main():
+    args, files = parse_args()
     TitleGrabber(vars(args))(files)
+
+
+if __name__ == '__main__':
+    main()
